@@ -335,9 +335,9 @@ Event Handling ← — — — — — — — — — — —
 
 1. **Download the Game**
    ```bash
-   # Download the haunted_mansion_game.py file
+   # Download the main.py file
    # Or clone from repository
-   git clone [repository-url]
+   git clone https://github.com/sparechange679/haunted_mansion_game.git
    ```
 
 2. **Verify Python Installation**
@@ -608,8 +608,8 @@ Future enhancements could include:
 
 ---
 
-**Author**: [Your Name]  
+**Author**: Blessings Kishindo Sabuni
 **Course**: Introduction to Programming with Python  
 **Institution**: NCC Education  
-**Date**: [Current Date]  
+**Date**: 3 July 2025  
 **Version**: 1.0
