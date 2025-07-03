@@ -354,9 +354,9 @@ Event Handling ← — — — — — — — — — — —
 
 4. **Run the Game**
    ```bash
-   python haunted_mansion_game.py
+   python main.py
    # or
-   python3 haunted_mansion_game.py
+   python3 main.py
    ```
 
 ### File Structure
