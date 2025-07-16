@@ -5,7 +5,7 @@ interacts with Odette the French ghost, and collects items to escape.
 
 Author: Karen Wanga Kishindo
 Date: 7/3/2025
-Version: 1.0
+Version: 1.4 - Fixed garden escape win condition
 """
 
 import random
@@ -88,6 +88,12 @@ class HauntedMansionGame:
         self.rooms = {}
         self.game_items = {}
         self.game_running = True
+        self.command_list = []
+        # Track door states - True means unlocked, False means locked
+        self.door_states = {
+            "pantry": False,  # Pantry door starts locked
+            "garden": False   # Garden gate starts locked
+        }
         self.setup_game()
     
     def clear_screen(self):
@@ -122,14 +128,14 @@ class HauntedMansionGame:
                 "The air is thick with the scent of old roses and decay. "
                 "Moonlight filters through stained glass windows.",
                 items=[self.game_items["candle"]],
-                connections={"north": "living_room", "east": "dining_room", "west": "library"}
+                connections={"north": "living_room", "east": "dining_room", "west": "library", "south": "garden"}
             ),
             "living_room": Room(
                 "Living Room",
                 "A once-elegant living room with covered furniture and cobwebs. "
                 "A cold fireplace dominates one wall. The atmosphere feels heavy.",
                 items=[self.game_items["silver_key"]],
-                connections={"south": "entrance_hall", "east": "kitchen", "north": "staircase"}
+                connections={"south": "entrance_hall", "east": "kitchen", "north": "staircase", "west": "garden"}
             ),
             "dining_room": Room(
                 "Dining Room",
@@ -193,9 +199,39 @@ class HauntedMansionGame:
                 connections={"north": "entrance_hall"}
             )
         }
+    
+    def is_door_accessible(self, from_room, to_room):
+        """Check if a door between rooms is accessible."""
+        if to_room == "pantry":
+            return self.door_states["pantry"]
+        elif to_room == "garden":
+            return self.door_states["garden"]
+        return True  # All other doors are always accessible
+    
+    def get_door_key(self, door_name):
+        """Get the key needed for a specific door."""
+        if door_name == "pantry":
+            return "silver_key"
+        elif door_name == "garden":
+            return "golden_key"
+        return None
+    
+    def toggle_door(self, door_name):
+        """Toggle the state of a door (lock/unlock)."""
+        if door_name in self.door_states:
+            self.door_states[door_name] = not self.door_states[door_name]
+            return True
+        return False
+    
+    def get_door_status_message(self, door_name):
+        """Get a message describing the current door status."""
+        if door_name not in self.door_states:
+            return ""
         
-        # Add secret garden connection (unlocked later)
-        self.rooms["entrance_hall"].connections["south"] = "garden"
+        if self.door_states[door_name]:
+            return f"The {door_name} is currently unlocked."
+        else:
+            return f"The {door_name} is currently locked."
     
     def start_game(self):
         """Start the game and get player's name."""
@@ -225,12 +261,14 @@ class HauntedMansionGame:
         while self.game_running and not self.player.game_complete:
             self.clear_screen()
             self.display_room_info()
-            self.show_choices()
-            self.handle_player_input()
             
+            # Check if player has won after room display
             if self.check_win_condition():
                 self.end_game_victory()
                 break
+                
+            self.show_choices()
+            self.handle_player_input()
         
         if not self.player.game_complete:
             print("\nThank you for playing the Haunted Mansion Escape Game!")
@@ -241,11 +279,25 @@ class HauntedMansionGame:
         print("\n" + "=" * 50)
         print(f"LOCATION: {current_room.name.upper()}")
         print("=" * 50)
-        print(current_room.description)
+        
+        # Special handling for Garden description
+        if current_room.name == "Garden":
+            if self.door_states["garden"]:
+                print("A moonlit garden behind the mansion. The exit gate stands open before you! Freedom is within reach...")
+            else:
+                print("A moonlit garden behind the mansion. The exit gate stands before you, but it's locked with a heavy chain.")
+        else:
+            print(current_room.description)
         
         # Check for special room events
-        if current_room.name == "bedroom" and not self.player.has_spoken_to_odette:
+        if current_room.name == "Odette's Bedroom" and not self.player.has_spoken_to_odette:
             self.encounter_odette()
+        
+        # Show door status for relevant rooms
+        if self.player.current_room == "kitchen":
+            print(f"\n{self.get_door_status_message('pantry')}")
+        elif self.player.current_room == "entrance_hall":
+            print(f"\n{self.get_door_status_message('garden')}")
         
         # Show items in the room
         if current_room.items:
@@ -256,11 +308,14 @@ class HauntedMansionGame:
         current_room.visited = True
     
     def show_choices(self):
-        """Display available choices to the player."""
+        """Display available choices to the player with numbers."""
         current_room = self.rooms[self.player.current_room]
         print("\n" + "-" * 30)
         print("WHAT WOULD YOU LIKE TO DO?")
         print("-" * 30)
+        
+        # Reset command list for each display
+        self.command_list = []
         
         # Movement options
         directions = current_room.get_available_directions()
@@ -268,52 +323,102 @@ class HauntedMansionGame:
             print("Movement options:")
             for direction in directions:
                 destination = self.rooms[current_room.connections[direction]]
-                print(f"  - Go {direction} to {destination.name}")
+                command = f"Go {direction} to {destination.name}"
+                self.command_list.append(("move", direction, command))
+                print(f"  {len(self.command_list)}. {command}")
         
         # Item options
         if current_room.items:
             print("\nItem options:")
             for item in current_room.items:
-                print(f"  - Pick up {item.name}")
+                command = f"Pick up {item.name}"
+                self.command_list.append(("pickup", item.name, command))
+                print(f"  {len(self.command_list)}. {command}")
         
         # General options
         print("\nGeneral options:")
-        print("  - Check bag")
-        print("  - Look around")
-        print("  - Use item")
-        print("  - Quit game")
+        self.command_list.append(("bag", None, "Check bag"))
+        print(f"  {len(self.command_list)}. Check bag")
+        
+        self.command_list.append(("look", None, "Look around"))
+        print(f"  {len(self.command_list)}. Look around")
+        
+        self.command_list.append(("use", None, "Use item"))
+        print(f"  {len(self.command_list)}. Use item")
+        
+        self.command_list.append(("remove", None, "Remove item"))
+        print(f"  {len(self.command_list)}. Remove item")
+        
+        self.command_list.append(("quit", None, "Quit game"))
+        print(f"  {len(self.command_list)}. Quit game")
     
     def handle_player_input(self):
-        """Handle player input and execute actions."""
-        choice = input("\nEnter your choice: ").strip().lower()
-        
-        if choice in ["quit", "exit", "q"]:
-            self.game_running = False
-        elif choice in ["bag", "check bag", "inventory"]:
-            self.player.show_bag()
-            input("\nPress Enter to continue...")
-        elif choice in ["look", "look around", "examine"]:
-            self.look_around()
-            input("\nPress Enter to continue...")
-        elif choice.startswith("go "):
-            direction = choice[3:]
-            self.move_player(direction)
-        elif choice.startswith("pick up ") or choice.startswith("take "):
-            item_name = choice.replace("pick up ", "").replace("take ", "")
-            self.pick_up_item(item_name)
-            input("\nPress Enter to continue...")
-        elif choice.startswith("use "):
-            item_name = choice[4:]
-            self.use_item(item_name)
-            input("\nPress Enter to continue...")
-        else:
-            # Try to parse as direction
-            current_room = self.rooms[self.player.current_room]
-            if choice in current_room.connections:
-                self.move_player(choice)
-            else:
-                print("I don't understand that command. Please try again.")
+        """Handle player input using numbered commands."""
+        try:
+            choice = input("\nEnter the number of your choice: ").strip()
+            if not choice:
+                print("Please enter a valid number.")
                 input("\nPress Enter to continue...")
+                return
+            
+            choice_index = int(choice) - 1
+            
+            if choice_index < 0 or choice_index >= len(self.command_list):
+                print("Invalid choice number. Please try again.")
+                input("\nPress Enter to continue...")
+                return
+            
+            action_type, data, command = self.command_list[choice_index]
+            
+            if action_type == "move":
+                self.move_player(data)
+            elif action_type == "pickup":
+                self.pick_up_item(data)
+                input("\nPress Enter to continue...")
+            elif action_type == "bag":
+                self.player.show_bag()
+                input("\nPress Enter to continue...")
+            elif action_type == "look":
+                self.look_around()
+                input("\nPress Enter to continue...")
+            elif action_type == "use":
+                self.use_item_menu()
+            elif action_type == "remove":
+                self.remove_item_from_bag()
+            elif action_type == "quit":
+                self.game_running = False
+        except ValueError:
+            print("Please enter a valid number.")
+            input("\nPress Enter to continue...")
+    
+    def use_item_menu(self):
+        """Display a menu for using items."""
+        if not self.player.bag:
+            print("Your bag is empty.")
+            input("\nPress Enter to continue...")
+            return
+        
+        print("\nItems in your bag:")
+        for i, item in enumerate(self.player.bag, 1):
+            print(f"  {i}. {item.name}")
+        
+        try:
+            choice = input("\nEnter the number of the item to use (or '0' to cancel): ").strip()
+            if choice == "0":
+                return
+            
+            choice_index = int(choice) - 1
+            
+            if choice_index < 0 or choice_index >= len(self.player.bag):
+                print("Invalid item number.")
+                input("\nPress Enter to continue...")
+                return
+            
+            item = self.player.bag[choice_index]
+            self.use_item(item.name)
+        except ValueError:
+            print("Please enter a valid number.")
+            input("\nPress Enter to continue...")
     
     def move_player(self, direction):
         """Move the player to a new room."""
@@ -322,14 +427,12 @@ class HauntedMansionGame:
         if direction in current_room.connections:
             new_room_name = current_room.connections[direction]
             
-            # Check for locked doors
-            if new_room_name == "pantry" and not self.player.has_item("silver_key"):
-                print("The pantry door is locked. You need a silver key to open it.")
-                input("\nPress Enter to continue...")
-                return
-            
-            if new_room_name == "garden" and not self.player.has_item("golden_key"):
-                print("The garden gate is locked with a heavy chain. You need a golden key.")
+            # Check if the door is accessible
+            if not self.is_door_accessible(self.player.current_room, new_room_name):
+                if new_room_name == "pantry":
+                    print("The pantry door is locked. You need to use the silver key to unlock it.")
+                elif new_room_name == "garden":
+                    print("The garden gate is locked with a heavy chain. You need to use the golden key to unlock it.")
                 input("\nPress Enter to continue...")
                 return
             
@@ -345,27 +448,118 @@ class HauntedMansionGame:
         current_room = self.rooms[self.player.current_room]
         
         for item in current_room.items:
-            if item.name.lower() == item_name.lower() or item_name in item.name.lower():
+            if item.name == item_name:
                 if self.player.add_item(item):
                     current_room.items.remove(item)
                     print(f"You picked up the {item.name}.")
                 else:
                     print(f"Your bag is full! (Maximum {self.player.bag_capacity} items)")
+                    print("You need to remove an item first.")
                 return
         
         print("There's no such item here.")
     
     def use_item(self, item_name):
-        """Use an item from the player's bag."""
-        if not item_name:
-            print("Which item would you like to use?")
+        """Use an item from the player's bag with specific interactions."""
+        item = None
+        for bag_item in self.player.bag:
+            if bag_item.name.lower() == item_name.lower():
+                item = bag_item
+                break
+        
+        if not item:
+            print("You don't have that item.")
             return
         
-        if self.player.has_item(item_name):
-            print(f"You use the {item_name}.")
-            # Add specific item usage logic here if needed
+        current_room = self.rooms[self.player.current_room]
+        print(f"\nYou use the {item.name}...")
+        
+        # Door toggle functionality
+        if item.name.lower() == "silver key":
+            if self.player.current_room == "kitchen":
+                current_state = self.door_states["pantry"]
+                if self.toggle_door("pantry"):
+                    if current_state:  # Was unlocked, now locked
+                        print("The silver key turns in the pantry door lock.")
+                        print("You hear a heavy click as the door locks.")
+                        print("The pantry is now locked!")
+                    else:  # Was locked, now unlocked
+                        print("The silver key fits perfectly in the pantry door lock.")
+                        print("You hear a satisfying click as the lock turns.")
+                        print("The pantry is now unlocked!")
+                else:
+                    print("The key doesn't seem to work on anything here.")
+            else:
+                print("The silver key doesn't seem to do anything useful here.")
+                print("Try using it near the pantry door.")
+        
+        elif item.name.lower() == "golden key":
+            if self.player.current_room == "entrance_hall":
+                current_state = self.door_states["garden"]
+                if self.toggle_door("garden"):
+                    if current_state:  # Was unlocked, now locked
+                        print("The golden key turns in the garden gate lock.")
+                        print("The heavy chain falls back into place with a clang.")
+                        print("The garden gate is now locked!")
+                    else:  # Was locked, now unlocked
+                        print("The golden key fits the heavy chain lock on the garden gate.")
+                        print("With a rusty creak, the chain falls away.")
+                        print("The garden gate is now unlocked!")
+                else:
+                    print("The key doesn't seem to work on anything here.")
+            else:
+                print("The golden key doesn't seem to do anything useful here.")
+                print("Try using it near the garden gate.")
+        
+        # Other item usage logic
+        elif item.name.lower() == "portrait" and self.player.current_room == "Odette's Bedroom":
+            print("You show Odette her portrait from when she was alive.")
+            print("Odette: 'Mon portrait! You found it!'")
+            print("The ghost seems pleased and fades away with a smile.")
+        elif item.name.lower() == "holy water":
+            print("You sprinkle the holy water around you.")
+            print("A faint hissing sound comes from the shadows as they retreat.")
+            print("You feel safer for now.")
+        elif item.name.lower() == "candle":
+            print("The candle's flickering light pushes back the darkness.")
+            print("The shadows seem less threatening now.")
         else:
-            print("You don't have that item.")
+            print(f"The {item.name} doesn't seem to do anything useful here.")
+        
+        input("\nPress Enter to continue...")
+    
+    def remove_item_from_bag(self):
+        """Allow player to remove an item from their bag."""
+        if not self.player.bag:
+            print("Your bag is already empty.")
+            input("\nPress Enter to continue...")
+            return
+        
+        print("\nCurrent bag contents:")
+        for i, item in enumerate(self.player.bag, 1):
+            print(f"  {i}. {item.name}")
+        
+        try:
+            choice = input("\nEnter the number of the item to remove (or '0' to cancel): ").strip()
+            if choice == "0":
+                return
+            
+            choice_index = int(choice) - 1
+            
+            if choice_index < 0 or choice_index >= len(self.player.bag):
+                print("Invalid item number.")
+                input("\nPress Enter to continue...")
+                return
+            
+            removed_item = self.player.bag[choice_index]
+            self.player.bag.remove(removed_item)
+            current_room = self.rooms[self.player.current_room]
+            current_room.items.append(removed_item)
+            print(f"You removed the {removed_item.name} from your bag and left it here.")
+            input("\nPress Enter to continue...")
+        except ValueError:
+            print("Please enter a valid number.")
+            input("\nPress Enter to continue...")
     
     def look_around(self):
         """Provide additional details about the current room."""
@@ -373,10 +567,14 @@ class HauntedMansionGame:
         print(f"\nYou take a closer look around the {current_room.name}...")
         
         # Room-specific details
-        if current_room.name == "bedroom":
+        if current_room.name == "Odette's Bedroom":
             print("The room is filled with the scent of roses. You sense a presence watching you.")
         elif current_room.name == "kitchen":
             print("You hear the sound of pots and pans rattling, though no one is there.")
+            print(f"The pantry door to the north is {('unlocked' if self.door_states['pantry'] else 'locked')}.")
+        elif current_room.name == "entrance_hall":
+            print("The grand entrance feels both welcoming and ominous.")
+            print(f"The garden gate to the south is {('unlocked' if self.door_states['garden'] else 'locked')}.")
         elif current_room.name == "library":
             print("The books seem to whisper secrets as you pass by them.")
         else:
@@ -406,8 +604,8 @@ class HauntedMansionGame:
     def check_win_condition(self):
         """Check if the player has won the game."""
         if (self.player.current_room == "garden" and 
-            self.player.has_item("golden_key") and 
-            len(self.player.bag) >= 3):  # Must have collected several items
+            self.door_states["garden"] and  # Garden gate must be unlocked
+            self.player.has_spoken_to_odette):  # Must have spoken to Odette
             return True
         return False
     
@@ -417,12 +615,14 @@ class HauntedMansionGame:
         print("\n" + "=" * 60)
         print("CONGRATULATIONS! YOU HAVE ESCAPED THE HAUNTED MANSION!")
         print("=" * 60)
-        print("\nAs you use the golden key to unlock the garden gate,")
-        print("Odette appears one last time...")
+        print("\nWith the garden gate unlocked,")
+        print("you step toward freedom...")
+        print("\nOdette appears one last time...")
         print("\nOdette: 'Merci beaucoup, mon ami. You have helped me find peace.'")
-        print("Odette: 'Take this key and go. You have earned your freedom.'")
+        print("Odette: 'You used the keys wisely and proved your worth.'")
+        print("Odette: 'Now go, you have earned your freedom.'")
         print("\nThe ghost smiles and fades away into the moonlight.")
-        print("You step through the gate and into the world beyond.")
+        print("You step through the unlocked gate and into the world beyond.")
         print(f"\nWell done, {self.player.name}! You successfully escaped the haunted mansion!")
         print("=" * 60)
         
