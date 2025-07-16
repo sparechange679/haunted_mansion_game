@@ -8,7 +8,6 @@ Date: 7/3/2025
 Version: 1.4 - Fixed garden escape win condition
 """
 
-import random
 import time
 import os
 
