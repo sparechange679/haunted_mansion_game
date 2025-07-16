@@ -135,7 +135,7 @@ class HauntedMansionGame:
                 "A once-elegant living room with covered furniture and cobwebs. "
                 "A cold fireplace dominates one wall. The atmosphere feels heavy.",
                 items=[self.game_items["silver_key"]],
-                connections={"south": "entrance_hall", "east": "kitchen", "north": "staircase", "west": "garden"}
+                connections={"south": "entrance_hall", "east": "kitchen", "north": "staircase"}
             ),
             "dining_room": Room(
                 "Dining Room",
